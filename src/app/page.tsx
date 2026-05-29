@@ -2,9 +2,10 @@
 
 import { useState, useEffect, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 
 export default function Dashboard() {
+  const supabase = getSupabase();
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +30,17 @@ export default function Dashboard() {
 
   // Date Filter State
   const [filterDate, setFilterDate] = useState('');
+
+  if (!supabase) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="max-w-xl w-full bg-white p-8 rounded-3xl shadow-lg border border-slate-200 text-center">
+          <h1 className="text-2xl font-bold text-slate-900">Supabase is not configured</h1>
+          <p className="mt-3 text-slate-600">Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel environment variables.</p>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
