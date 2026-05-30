@@ -5,11 +5,40 @@ import DashboardProvider, { useDashboard } from '@/app/components/dashboard/Dash
 function ExpensesContent() {
   const { expenses, filterDate, setFilterDate, expenseInput, setExpenseInput, handleAddExpense } = useDashboard();
 
+  const categories = [
+    'Salary',
+    'Electricity',
+    'Water',
+    'Tax',
+    'Cheese',
+    'Chicken',
+    'Bread',
+    'Injera',
+    'Fruits',
+    'Vegetables',
+    'Meat',
+    'Rent',
+    'Hosting',
+  ];
+
+  const categoryTotals = categories.map((category) => ({
+    category,
+    amount: expenses.filter((item) => item.category === category).reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
+  }));
+
   return (
     <section className="space-y-6">
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Expenses Engine</h1>
         <p className="mt-2 text-slate-600">Record expenses by category, type, and date to keep cashflow visibility sharp.</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {categoryTotals.slice(0, 4).map((item) => (
+            <div key={item.category} className="rounded-3xl bg-slate-50 p-5 border border-slate-200 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{item.category}</p>
+              <p className="mt-3 text-xl font-semibold text-slate-900">${item.amount.toFixed(2)}</p>
+            </div>
+          ))}
+        </div>
         <form onSubmit={handleAddExpense} className="mt-6 grid gap-4 xl:grid-cols-5 items-end">
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-500">Category</label>

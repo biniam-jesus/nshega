@@ -73,7 +73,7 @@ function OperationsContent() {
 
 export default function OperationsPage() {
   return (
-    <DashboardProvider activeTab="operational">
+    <DashboardProvider activeTab="operations">
       <OperationsContent />
     </DashboardProvider>
   );
