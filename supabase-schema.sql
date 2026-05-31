@@ -183,3 +183,36 @@ $$ LANGUAGE plpgsql;
 -- 1) Seed public.admin_users manually using the Supabase service role or SQL editor after creating a user.
 -- 2) The app assumes an authenticated admin session to access dashboard tables.
 -- 3) If you want, I can also create a migration-friendly version for Supabase Studio.
+
+
+-- Purchases / Shopping tracking
+CREATE TABLE IF NOT EXISTS public.purchases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_name text NOT NULL,
+  category text NOT NULL,
+  quantity integer NOT NULL DEFAULT 1,
+  unit_price numeric(12,2) NOT NULL DEFAULT 0,
+  total_price numeric(12,2) NOT NULL DEFAULT 0,
+  cash_used numeric(12,2) NOT NULL DEFAULT 0,
+  supplier_name text NOT NULL,
+  payment_method text NOT NULL,
+  purchase_date date NOT NULL,
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Enable Row Level Security
+ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for purchases (admin only)
+CREATE POLICY "Authenticated admins can read purchases" ON public.purchases
+  FOR SELECT USING (auth.role() = 'authenticated' AND public.is_admin_user());
+
+CREATE POLICY "Authenticated admins can insert purchases" ON public.purchases
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated' AND public.is_admin_user());
+
+CREATE POLICY "Authenticated admins can update purchases" ON public.purchases
+  FOR UPDATE USING (auth.role() = 'authenticated' AND public.is_admin_user());
+
+CREATE POLICY "Authenticated admins can delete purchases" ON public.purchases
+  FOR DELETE USING (auth.role() = 'authenticated' AND public.is_admin_user());
