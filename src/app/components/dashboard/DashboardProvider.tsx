@@ -705,11 +705,15 @@ export default function DashboardProvider({ activeTab, children }: { activeTab: 
 
 type DashboardContextType = {
   session: Session;
+  branches: any[];
+  selectedBranchId: string | null;
+  setSelectedBranchId: React.Dispatch<React.SetStateAction<string | null>>;
   sales: any[];
   expenses: any[];
   employees: any[];
   attendance: any[];
   assets: any[];
+  suppliers: any[];
   consumables: any[];
   drinks: any[];
   customerExp: any[];
