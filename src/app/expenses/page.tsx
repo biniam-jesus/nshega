@@ -68,6 +68,12 @@ function ExpensesContent() {
     <section className="space-y-6">
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Expenses Engine</h1>
+        {!process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
+            <strong>⚠️ Database Disconnected:</strong> Missing environment variables. 
+            Data will not be saved permanently.
+          </div>
+        )}
         <p className="mt-2 text-slate-600">Record expenses by category, type, and date to keep cashflow visibility sharp.</p>
         
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
