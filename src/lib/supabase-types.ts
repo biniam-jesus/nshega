@@ -50,6 +50,105 @@ export interface Database {
           updated_at?: string;
         };
       };
+      branches: {
+        Row: {
+          id: string;
+          name: string;
+          code: string;
+          address: string | null;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          code: string;
+          address?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          code?: string;
+          address?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+      };
+      suppliers: {
+        Row: {
+          id: string;
+          branch_id: string | null;
+          name: string;
+          contact_person: string | null;
+          email: string | null;
+          phone: string | null;
+          category: string | null;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id?: string | null;
+          name: string;
+          contact_person?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          category?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          branch_id?: string | null;
+          name?: string;
+          contact_person?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          category?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+      };
+      inventory_logs: {
+        Row: {
+          id: string;
+          branch_id: string | null;
+          item_type: 'consumable' | 'drink';
+          item_id: string;
+          change_amount: number;
+          reason: string;
+          previous_quantity: number;
+          new_quantity: number;
+          recorded_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id?: string | null;
+          item_type: 'consumable' | 'drink';
+          item_id: string;
+          change_amount: number;
+          reason: string;
+          previous_quantity: number;
+          new_quantity: number;
+          recorded_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          branch_id?: string | null;
+          item_type?: 'consumable' | 'drink';
+          item_id?: string;
+          change_amount?: number;
+          reason?: string;
+          previous_quantity?: number;
+          new_quantity?: number;
+          recorded_by?: string | null;
+          created_at?: string;
+        };
+      };
       daily_sales: {
         Row: {
           id: string;
@@ -430,6 +529,54 @@ export interface Database {
           updated_at?: string;
         };
       };
+      purchases: {
+        Row: {
+          id: string;
+          branch_id: string | null;
+          item_name: string;
+          category: string;
+          quantity: number;
+          unit_price: string;
+          total_price: string;
+          cash_used: string;
+          supplier_id: string | null;
+          supplier_name: string | null;
+          payment_method: string;
+          purchase_date: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id?: string | null;
+          item_name: string;
+          category: string;
+          quantity?: number;
+          unit_price?: string;
+          cash_used?: string;
+          supplier_id?: string | null;
+          supplier_name?: string | null;
+          payment_method: string;
+          purchase_date: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          branch_id?: string | null;
+          item_name?: string;
+          category?: string;
+          quantity?: number;
+          unit_price?: string;
+          cash_used?: string;
+          supplier_id?: string | null;
+          supplier_name?: string | null;
+          payment_method?: string;
+          purchase_date?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+      };
       notifications: {
         Row: {
           id: string;
@@ -504,6 +651,7 @@ export interface Database {
     Functions: {
       fn_profit_loss_summary: {
         Args: {
+          p_branch_id: string;
           start_date: string;
           end_date: string;
         };

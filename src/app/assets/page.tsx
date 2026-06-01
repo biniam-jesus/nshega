@@ -18,22 +18,30 @@ function AssetsContent() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {assets.map((asset) => (
-          <div key={asset.id} className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xl font-semibold text-slate-900">{asset.name}</p>
-                <p className="mt-1 text-sm text-slate-500">{asset.condition || 'Condition unavailable'}</p>
-              </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700">{asset.maintenance_status || 'Stable'}</span>
-            </div>
-            <div className="mt-6 space-y-3 text-sm text-slate-600">
-              <p>Cost: ${Number(asset.cost || 0).toFixed(2)}</p>
-              <p>Purchased: {asset.purchase_date || 'Unknown'}</p>
-              <p>Condition: {asset.condition || 'Unknown'}</p>
-            </div>
+        {assets.length === 0 ? (
+          <div className="lg:col-span-3 bg-white p-12 rounded-3xl border border-dashed border-slate-300 text-center">
+            <p className="text-slate-500">No assets found. Click "Add Asset" to start tracking your equipment.</p>
           </div>
-        ))}
+        ) : (
+          assets.map((asset) => (
+            <div key={asset.id} className="rounded-3xl bg-white border border-slate-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xl font-semibold text-slate-900">{asset.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">{asset.condition || 'Condition unavailable'}</p>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                  {asset.maintenance_status || 'Stable'}
+                </span>
+              </div>
+              <div className="mt-6 space-y-3 text-sm text-slate-600">
+                <p>Cost: ${Number(asset.cost || 0).toFixed(2)}</p>
+                <p>Purchased: {asset.purchase_date || 'Unknown'}</p>
+                <p>Condition: {asset.condition || 'Unknown'}</p>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );

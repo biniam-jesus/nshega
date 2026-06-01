@@ -37,6 +37,21 @@ CREATE TABLE IF NOT EXISTS public.branches (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Supplier Management
+CREATE TABLE IF NOT EXISTS public.suppliers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id uuid REFERENCES public.branches(id) ON DELETE SET NULL,
+  name text NOT NULL,
+  contact_person text,
+  email text,
+  phone text,
+  address text,
+  category text, -- e.g., 'Dairy', 'Bakery', 'Maintenance'
+  active boolean DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Daily sales reconciliation
 CREATE TABLE IF NOT EXISTS public.daily_sales (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -108,6 +123,20 @@ CREATE TABLE IF NOT EXISTS public.consumables (
   created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Detailed Stock Logs (Tracking history of changes)
+CREATE TABLE IF NOT EXISTS public.inventory_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id uuid REFERENCES public.branches(id) ON DELETE SET NULL,
+  item_type text NOT NULL CHECK (item_type IN ('consumable', 'drink')),
+  item_id uuid NOT NULL,
+  change_amount int NOT NULL,
+  reason text NOT NULL, -- e.g., 'restock', 'waste', 'sale', 'correction'
+  previous_quantity int NOT NULL,
+  new_quantity int NOT NULL,
+  recorded_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
 -- Drinks inventory tracking
@@ -187,6 +216,25 @@ CREATE TABLE IF NOT EXISTS public.upgrades (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Purchase tracking (Record-keeping only)
+CREATE TABLE IF NOT EXISTS public.purchases (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id uuid REFERENCES public.branches(id) ON DELETE SET NULL,
+  item_name text NOT NULL,
+  category text NOT NULL,
+  quantity integer NOT NULL DEFAULT 1,
+  unit_price numeric(12,2) NOT NULL DEFAULT 0,
+  total_price numeric(12,2) GENERATED ALWAYS AS (quantity * unit_price) STORED,
+  cash_used numeric(12,2) NOT NULL DEFAULT 0, -- For tracking only, not deducted from P&L
+  supplier_id uuid REFERENCES public.suppliers(id) ON DELETE SET NULL,
+  supplier_name text, -- Fallback text field
+  payment_method text NOT NULL,
+  purchase_date date NOT NULL,
+  notes text,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Notification inbox for admin/manager alerts
 CREATE TABLE IF NOT EXISTS public.notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -222,6 +270,53 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Automatically set the creator profile on purchases
+CREATE OR REPLACE FUNCTION public.fn_set_purchase_created_by()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW.created_by IS NULL THEN
+    SELECT id INTO NEW.created_by FROM public.profiles WHERE auth_uid = auth.uid() LIMIT 1;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Automatically update inventory quantities and logs when a purchase is recorded
+CREATE OR REPLACE FUNCTION public.fn_update_inventory_from_purchase()
+RETURNS trigger AS $$
+DECLARE
+  target_id uuid;
+  prev_qty int;
+BEGIN
+  -- Handle Consumables
+  IF NEW.category = 'consumable' THEN
+    SELECT id, quantity INTO target_id, prev_qty FROM public.consumables 
+    WHERE name = NEW.item_name AND branch_id = NEW.branch_id LIMIT 1;
+    
+    IF target_id IS NOT NULL THEN
+      UPDATE public.consumables SET quantity = quantity + NEW.quantity, last_restocked_at = now() WHERE id = target_id;
+      
+      INSERT INTO public.inventory_logs(branch_id, item_type, item_id, change_amount, reason, previous_quantity, new_quantity, recorded_by)
+      VALUES (NEW.branch_id, 'consumable', target_id, NEW.quantity, 'Purchase Entry: ' || NEW.item_name, prev_qty, prev_qty + NEW.quantity, NEW.created_by);
+    END IF;
+  
+  -- Handle Drinks
+  ELSIF NEW.category = 'drinks' THEN
+    SELECT id, quantity INTO target_id, prev_qty FROM public.drinks_stock 
+    WHERE name = NEW.item_name AND branch_id = NEW.branch_id LIMIT 1;
+
+    IF target_id IS NOT NULL THEN
+      UPDATE public.drinks_stock SET quantity = quantity + NEW.quantity, last_updated = now() WHERE id = target_id;
+      
+      INSERT INTO public.inventory_logs(branch_id, item_type, item_id, change_amount, reason, previous_quantity, new_quantity, recorded_by)
+      VALUES (NEW.branch_id, 'drink', target_id, NEW.quantity, 'Purchase Entry: ' || NEW.item_name, prev_qty, prev_qty + NEW.quantity, NEW.created_by);
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION public.fn_daily_sales_calculate()
 RETURNS trigger AS $$
@@ -289,7 +384,8 @@ CREATE OR REPLACE FUNCTION public.is_manager_or_admin() RETURNS boolean AS $$
   );
 $$ LANGUAGE sql STABLE;
 
-CREATE OR REPLACE FUNCTION public.fn_profit_loss_summary(start_date date, end_date date)
+-- Updated P&L summary to be branch-aware
+CREATE OR REPLACE FUNCTION public.fn_profit_loss_summary(p_branch_id uuid, start_date date, end_date date)
 RETURNS TABLE(
   total_sales numeric,
   total_expenses numeric,
@@ -301,17 +397,17 @@ RETURNS TABLE(
 BEGIN
   RETURN QUERY
   SELECT
-    COALESCE((SELECT SUM(actual_cash) FROM public.daily_sales WHERE date BETWEEN start_date AND end_date), 0),
-    COALESCE((SELECT SUM(amount) FROM public.expenses WHERE date BETWEEN start_date AND end_date), 0),
-    COALESCE((SELECT SUM(amount) FROM public.customer_expenses WHERE date BETWEEN start_date AND end_date), 0),
-    COALESCE((SELECT SUM(cost) FROM public.upgrades WHERE date BETWEEN start_date AND end_date), 0),
-    COALESCE((SELECT SUM(cost) FROM public.maintenance WHERE date BETWEEN start_date AND end_date), 0),
-    COALESCE((SELECT SUM(actual_cash) FROM public.daily_sales WHERE date BETWEEN start_date AND end_date), 0)
+    COALESCE((SELECT SUM(actual_cash) FROM public.daily_sales WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0),
+    COALESCE((SELECT SUM(amount) FROM public.expenses WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0),
+    COALESCE((SELECT SUM(amount) FROM public.customer_expenses WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0),
+    COALESCE((SELECT SUM(cost) FROM public.upgrades WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0),
+    COALESCE((SELECT SUM(cost) FROM public.maintenance WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0),
+    COALESCE((SELECT SUM(actual_cash) FROM public.daily_sales WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0)
       - (
-        COALESCE((SELECT SUM(amount) FROM public.expenses WHERE date BETWEEN start_date AND end_date), 0)
-        + COALESCE((SELECT SUM(amount) FROM public.customer_expenses WHERE date BETWEEN start_date AND end_date), 0)
-        + COALESCE((SELECT SUM(cost) FROM public.upgrades WHERE date BETWEEN start_date AND end_date), 0)
-        + COALESCE((SELECT SUM(cost) FROM public.maintenance WHERE date BETWEEN start_date AND end_date), 0)
+        COALESCE((SELECT SUM(amount) FROM public.expenses WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0)
+        + COALESCE((SELECT SUM(amount) FROM public.customer_expenses WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0)
+        + COALESCE((SELECT SUM(cost) FROM public.upgrades WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0)
+        + COALESCE((SELECT SUM(cost) FROM public.maintenance WHERE branch_id = p_branch_id AND date BETWEEN start_date AND end_date), 0)
       );
 END;
 $$ LANGUAGE plpgsql STABLE;
@@ -414,6 +510,14 @@ CREATE TRIGGER trg_create_profile_from_auth
 AFTER INSERT ON auth.users
 FOR EACH ROW EXECUTE FUNCTION public.fn_create_profile_from_auth();
 
+CREATE TRIGGER trg_set_purchase_created_by
+BEFORE INSERT ON public.purchases
+FOR EACH ROW EXECUTE FUNCTION public.fn_set_purchase_created_by();
+
+CREATE TRIGGER trg_update_inventory_on_purchase
+AFTER INSERT ON public.purchases
+FOR EACH ROW EXECUTE FUNCTION public.fn_update_inventory_from_purchase();
+
 -- Enable Row Level Security on the core tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
@@ -428,6 +532,9 @@ ALTER TABLE public.customer_expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.upgrades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Policies for profiles
@@ -464,7 +571,10 @@ BEGIN
     'assets',
     'customer_expenses',
     'maintenance',
-    'upgrades'
+    'upgrades',
+    'purchases',
+    'suppliers',
+    'inventory_logs'
   ] LOOP
     EXECUTE format('CREATE POLICY IF NOT EXISTS "Managers and admins can select %s" ON public.%I FOR SELECT USING (auth.role() = ''authenticated'' AND public.is_manager_or_admin())', table_name, table_name);
     EXECUTE format('CREATE POLICY IF NOT EXISTS "Managers and admins can insert %s" ON public.%I FOR INSERT USING (auth.role() = ''authenticated'' AND public.is_manager_or_admin()) WITH CHECK (auth.role() = ''authenticated'' AND public.is_manager_or_admin())', table_name, table_name);
@@ -518,6 +628,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_branch_category ON public.assets(branch_id
 CREATE INDEX IF NOT EXISTS idx_customer_expenses_branch_date ON public.customer_expenses(branch_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_maintenance_branch_date ON public.maintenance(branch_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_upgrades_branch_date ON public.upgrades(branch_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_purchases_branch_date ON public.purchases(branch_id, purchase_date DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON public.notifications(recipient_id, read_at);
 
 -- Sample seed data for Shega Café operations
